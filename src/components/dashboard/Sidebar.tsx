@@ -9,9 +9,11 @@ import {
     Library,
     GraduationCap,
     Sparkles,
-    BrainCircuit
+    BrainCircuit,
+    PenTool,
+    LogOut,
+    User
 } from "lucide-react"
-import StudyStatus from "./StudyStatus"
 
 const routes = [
     {
@@ -37,6 +39,12 @@ const routes = [
         icon: GraduationCap,
         href: "/dashboard/questions",
         color: "text-orange-700",
+    },
+    {
+        label: "Ingestão Manual",
+        icon: PenTool,
+        href: "/dashboard/ingestao",
+        color: "text-blue-500",
     },
     {
         label: "Oracle",
@@ -81,8 +89,24 @@ export default function Sidebar() {
                     ))}
                 </div>
             </div>
-            <div className="px-3">
-                <StudyStatus />
+
+            {/* User Profile Section */}
+            <div className="px-3 py-2 border-t border-white/10">
+                <div className="p-3 rounded-xl bg-white/5 backdrop-blur-sm">
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
+                            <User className="w-5 h-5 text-white" />
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-sm font-semibold text-white">Rafael Marera</p>
+                            <p className="text-xs text-zinc-400">Diplomata</p>
+                        </div>
+                    </div>
+                    <button className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition text-sm text-zinc-400 hover:text-white">
+                        <LogOut className="w-4 h-4" />
+                        Log Out
+                    </button>
+                </div>
             </div>
         </div>
     )
