@@ -69,7 +69,6 @@ export default function AchievementUnlock({
             colors: achievement.rarity === 'legendary'
                 ? ['#FFD700', '#FFA500', '#FF6347']
                 : ['#10B981', '#3B82F6', '#8B5CF6'],
-            duration,
         });
 
         // Auto close
