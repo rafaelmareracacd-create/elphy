@@ -96,6 +96,32 @@ Agora, escreva o super comentário em português brasileiro. Comece explicando p
     }
   }, [currentIndex, questions])
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+S or Cmd+S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        saveComment()
+        return
+      }
+
+      // Only handle navigation if not focused on textarea
+      if (document.activeElement?.tagName === 'TEXTAREA') return
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        goToPrevious()
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        goToNext()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [currentIndex, questions.length, comment])
+
   const loadQuestions = async () => {
     setLoading(true)
     try {
@@ -196,9 +222,15 @@ Agora, escreva o super comentário em português brasileiro. Comece explicando p
   const currentQuestion = questions[currentIndex]
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold">Super Comentários</h1>
+    <div className="p-6 lg:p-8 max-w-5xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white">Super Comentários</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            {questions.filter(q => q.super_comment).length} de {questions.length} comentadas
+          </p>
+        </div>
 
         {/* Filter buttons */}
         <div className="flex gap-2">
@@ -223,6 +255,20 @@ Agora, escreva o super comentário em português brasileiro. Comece explicando p
           >
             Com Comentário
           </Button>
+        </div>
+      </div>
+
+      {/* Progress Bar */}
+      <div className="mb-6">
+        <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-purple-500 to-purple-600 transition-all duration-300"
+            style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}
+          />
+        </div>
+        <div className="flex justify-between mt-1 text-xs text-gray-500">
+          <span>Item {currentIndex + 1} de {questions.length}</span>
+          <span className="text-gray-400">← → para navegar • Ctrl+S para salvar</span>
         </div>
       </div>
 

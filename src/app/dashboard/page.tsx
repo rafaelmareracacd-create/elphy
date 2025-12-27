@@ -3,182 +3,365 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
-import StatsCard from '@/components/dashboard/StatsCard'
-import MemoryRetentionChart from '@/components/dashboard/MemoryRetentionChart'
-import { BookOpen, Target, Clock, Zap } from 'lucide-react'
+import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from 'recharts'
+import { Clock, Plus, Flame, Target, BookOpen, TrendingUp, Search } from 'lucide-react'
+import XPBar from '@/components/gamification/XPBar'
+import StreakFlame from '@/components/gamification/StreakFlame'
+import { getGamificationStats } from '@/lib/actions/gamification'
+import type { GamificationStats } from '@/lib/gamification/utils'
 
-export default function DashboardPage() {
-    const [totalQuestions, setTotalQuestions] = useState(0)
+// Mock data for review history
+const reviewHistoryData = [
+    { date: '01/12', reviews: 15 },
+    { date: '03/12', reviews: 22 },
+    { date: '05/12', reviews: 18 },
+    { date: '07/12', reviews: 28 },
+    { date: '09/12', reviews: 32 },
+    { date: '11/12', reviews: 25 },
+    { date: '13/12', reviews: 35 },
+    { date: '15/12', reviews: 40 },
+    { date: '17/12', reviews: 38 },
+    { date: '19/12', reviews: 45 },
+]
+
+// Central Circular Progress Component for Daily Goal
+function CircularProgress({ value, label }: { value: number; label: string }) {
+    const circumference = 2 * Math.PI * 100
+    const offset = circumference - (value / 100) * circumference
+
+    return (
+        <div className="relative w-72 h-72 flex items-center justify-center">
+            {/* Subtle emerald glow */}
+            <div className="absolute inset-0 rounded-full bg-emerald-100/50 blur-2xl" />
+
+            {/* SVG Circle */}
+            <svg className="w-full h-full transform -rotate-90 relative z-10">
+                {/* Background circle */}
+                <circle
+                    cx="144"
+                    cy="144"
+                    r="100"
+                    stroke="#E5E7EB"
+                    strokeWidth="16"
+                    fill="none"
+                />
+                {/* Progress circle with emerald gradient */}
+                <defs>
+                    <linearGradient id="emeraldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#10B981" />
+                        <stop offset="100%" stopColor="#059669" />
+                    </linearGradient>
+                </defs>
+                <motion.circle
+                    cx="144"
+                    cy="144"
+                    r="100"
+                    stroke="url(#emeraldGradient)"
+                    strokeWidth="16"
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeDasharray={circumference}
+                    initial={{ strokeDashoffset: circumference }}
+                    animate={{ strokeDashoffset: offset }}
+                    transition={{ duration: 2, ease: "easeOut" }}
+                    style={{
+                        filter: 'drop-shadow(0 0 8px rgba(16, 185, 129, 0.3))'
+                    }}
+                />
+            </svg>
+
+            {/* Center text */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <motion.span
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.5, type: "spring" as const }}
+                    className="text-6xl font-bold text-gray-900"
+                >
+                    {value}%
+                </motion.span>
+                <span className="text-sm text-gray-500 mt-2">{label}</span>
+            </div>
+        </div>
+    )
+}
+
+export default function Dashboard() {
+    const [activeDecks, setActiveDecks] = useState<any[]>([])
+    const [gamificationStats, setGamificationStats] = useState<GamificationStats | null>(null)
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        loadStats()
+        async function fetchData() {
+            try {
+                // Fetch decks
+                const { data: decksData, error: decksError } = await supabase
+                    .from('decks')
+                    .select('id, name, cards_due, cards_total, last_reviewed')
+                    .eq('is_active', true)
+                    .limit(5)
+
+                if (decksError) throw decksError
+                if (decksData) {
+                    setActiveDecks(decksData)
+                }
+
+                // Fetch gamification stats
+                const stats = await getGamificationStats()
+                if (stats) {
+                    setGamificationStats(stats)
+                }
+            } catch (error) {
+                console.error('Error loading dashboard data:', error)
+            } finally {
+                setLoading(false)
+            }
+        }
+        fetchData()
     }, [])
 
-    const loadStats = async () => {
-        try {
-            const { count, error } = await supabase
-                .from('questions')
-                .select('*', { count: 'exact', head: true })
-
-            if (error) throw error
-            setTotalQuestions(count || 0)
-        } catch (error) {
-            console.error('Error loading stats:', error)
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    // Get current hour for greeting
     const hour = new Date().getHours()
     const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite'
 
-    // Calculate mock accuracy (will be real when we have review sessions)
-    const accuracy = totalQuestions > 0 ? 76 : 0
+    // Animation variants
+    const containerVariants = {
+        hidden: { opacity: 0 },
+        visible: {
+            opacity: 1,
+            transition: {
+                staggerChildren: 0.08
+            }
+        }
+    }
+
+    const itemVariants = {
+        hidden: { opacity: 0, y: 20 },
+        visible: {
+            opacity: 1,
+            y: 0,
+            transition: { type: 'spring' as const, stiffness: 300, damping: 24 }
+        }
+    }
 
     return (
-        <>
-            {/* Premium Fonts */}
-            <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-      `}</style>
-
-            <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-blue-950 p-8">
-                {/* Welcome Header */}
+        <div className="min-h-screen bg-[#F8F9FA] p-8 pt-24">
+            <motion.div
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+                className="max-w-[1600px] mx-auto space-y-6"
+            >
+                {/* Search Bar - Prominent at top */}
                 <motion.div
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mb-8"
+                    variants={itemVariants}
+                    className="w-full max-w-2xl"
                 >
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h1 className="text-4xl font-['Inter'] font-bold text-gray-900 dark:text-white mb-2">
-                                {greeting}, Rafael! 👋
-                            </h1>
-                            <p className="text-gray-600 dark:text-gray-400 font-['Inter']">
-                                {new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                            </p>
-                        </div>
+                    <div className="relative group">
+                        <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-emerald-500 transition-colors" />
+                        <input
+                            type="text"
+                            placeholder="Buscar decks..."
+                            className="w-full pl-14 pr-6 py-4 bg-white border-2 border-gray-200 rounded-2xl text-base text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 transition-all shadow-sm"
+                        />
                     </div>
                 </motion.div>
 
-                {/* Bento Grid Layout */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {/* Quick Stats - Small Cards */}
-                    <StatsCard
-                        title="Cartões para Hoje"
-                        value={loading ? '...' : totalQuestions}
-                        icon={BookOpen}
-                        color="blue"
-                        trend={{ value: '+8', isPositive: true }}
-                    />
+                {/* Gamification Row - XP Bar and Streak */}
+                {gamificationStats && (
+                    <div className="grid grid-cols-12 gap-6">
+                        {/* XP Bar */}
+                        <motion.div
+                            variants={itemVariants}
+                            className="col-span-12 lg:col-span-8"
+                        >
+                            <XPBar
+                                currentXP={gamificationStats.totalXP}
+                                level={gamificationStats.currentLevel}
+                                xpToNext={gamificationStats.xpToNextLevel}
+                                showAnimation={false}
+                                variant="full"
+                            />
+                        </motion.div>
 
-                    <StatsCard
-                        title="Precisão de Acertos"
-                        value={loading ? '...' : `${accuracy}%`}
-                        icon={Target}
-                        color="green"
-                        trend={{ value: '+4%', isPositive: true }}
-                    />
-
-                    <StatsCard
-                        title="Sequência de Estudos"
-                        value="12 dias"
-                        icon={Zap}
-                        color="orange"
-                        trend={{ value: '+2', isPositive: true }}
-                    />
-
-                    <StatsCard
-                        title="Tempo Médio"
-                        value="4.2s"
-                        icon={Clock}
-                        color="purple"
-                        trend={{ value: '-0.8s', isPositive: true }}
-                    />
-
-                    {/* Memory Retention Chart - Large Card spanning 2 columns */}
-                    <div className="md:col-span-2 lg:col-span-3">
-                        <MemoryRetentionChart />
+                        {/* Streak Flame */}
+                        <motion.div
+                            variants={itemVariants}
+                            className="col-span-12 lg:col-span-4"
+                        >
+                            <StreakFlame
+                                days={gamificationStats.dailyStreak}
+                                isActive={gamificationStats.dailyStreak > 0}
+                                isFrozen={false}
+                                variant="full"
+                            />
+                        </motion.div>
                     </div>
+                )}
 
-                    {/* Recently Studied Topics */}
+                {/* Row 1: Hero Section */}
+                <div className="grid grid-cols-12 gap-6">
+                    {/* Welcome Card */}
                     <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.3 }}
-                        className="lg:row-span-2 group relative"
+                        variants={itemVariants}
+                        className="col-span-12 lg:col-span-4 bg-white rounded-xl shadow-sm border border-gray-100 p-6"
                     >
-                        {/* Glow */}
-                        <div className="absolute -inset-0.5 bg-gradient-to-br from-pink-500/20 to-purple-500/20 rounded-3xl opacity-0 group-hover:opacity-100 blur-xl transition-opacity duration-300" />
-
-                        {/* Card */}
-                        <div className="relative backdrop-blur-xl bg-white/80 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-3xl p-6 shadow-lg dark:shadow-2xl h-full">
-                            <h3 className="text-lg font-['Inter'] font-bold text-gray-900 dark:text-white mb-4">
-                                Tópicos Recentes
-                            </h3>
-
-                            <div className="space-y-3">
-                                {[
-                                    { topic: 'História do Brasil', count: 15, color: 'bg-blue-500' },
-                                    { topic: 'Política Internacional', count: 12, color: 'bg-purple-500' },
-                                    { topic: 'Geografia', count: 8, color: 'bg-green-500' },
-                                    { topic: 'Economia', count: 10, color: 'bg-orange-500' },
-                                ].map((item, i) => (
-                                    <div key={i} className="flex items-center justify-between p-3 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
-                                        <div className="flex items-center gap-3">
-                                            <div className={`w-2 h-2 rounded-full ${item.color}`} />
-                                            <span className="text-sm font-['Inter'] font-medium text-gray-700 dark:text-gray-300">
-                                                {item.topic}
-                                            </span>
-                                        </div>
-                                        <span className="text-xs font-['Inter'] font-semibold text-gray-500 dark:text-gray-500">
-                                            {item.count} questões
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
+                        <p className="text-sm text-gray-500 mb-1">{greeting}, Rafael! 👋</p>
+                        <h1 className="text-2xl font-bold text-gray-900 mb-3">
+                            Continue estudando
+                        </h1>
+                        <p className="text-sm text-gray-600 mb-4">
+                            Você tem <span className="font-semibold text-emerald-600">12 reviews</span> pendentes
+                        </p>
+                        <motion.button
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl font-semibold text-white text-sm shadow-md hover:shadow-lg transition-all"
+                        >
+                            <BookOpen className="w-4 h-4" />
+                            Iniciar Revisão
+                        </motion.button>
                     </motion.div>
 
-                    {/* Quick Actions */}
+                    {/* Central Circular Progress */}
                     <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.4 }}
-                        className="md:col-span-2 group relative"
+                        variants={itemVariants}
+                        className="col-span-12 lg:col-span-4 bg-white rounded-xl shadow-sm border border-gray-100 p-8 flex items-center justify-center"
                     >
-                        {/* Glow */}
-                        <div className="absolute -inset-0.5 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 rounded-3xl opacity-0 group-hover:opacity-100 blur-xl transition-opacity duration-300" />
+                        <CircularProgress value={72} label="Meta diária" />
+                    </motion.div>
 
-                        {/* Card */}
-                        <div className="relative backdrop-blur-xl bg-white/80 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-3xl p-6 shadow-lg dark:shadow-2xl">
-                            <h3 className="text-lg font-['Inter'] font-bold text-gray-900 dark:text-white mb-4">
-                                Ações Rápidas
-                            </h3>
-
-                            <div className="grid grid-cols-2 gap-3">
-                                {[
-                                    { label: 'Iniciar Revisão', href: '/dashboard/anki', gradient: 'from-blue-500 to-cyan-500' },
-                                    { label: 'Banco de Questões', href: '/dashboard/questions', gradient: 'from-purple-500 to-pink-500' },
-                                    { label: 'Oracle IA', href: '/dashboard/oracle', gradient: 'from-green-500 to-emerald-500' },
-                                    { label: 'Ingestão Manual', href: '/dashboard/ingestao', gradient: 'from-orange-500 to-amber-500' },
-                                ].map((action, i) => (
-                                    <a
-                                        key={i}
-                                        href={action.href}
-                                        className={`group/btn relative p-4 rounded-2xl bg-gradient-to-br ${action.gradient} text-white font-['Inter'] font-semibold text-sm text-center hover:scale-105 transition-transform duration-300 shadow-lg`}
-                                    >
-                                        <div className="absolute inset-0 bg-white/20 rounded-2xl opacity-0 group-hover/btn:opacity-100 transition-opacity" />
-                                        <span className="relative">{action.label}</span>
-                                    </a>
-                                ))}
+                    {/* Quick Stats Summary */}
+                    <motion.div
+                        variants={itemVariants}
+                        className="col-span-12 lg:col-span-4 bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-xl border border-emerald-200 p-6"
+                    >
+                        <div className="flex items-center gap-2 mb-4">
+                            <TrendingUp className="w-5 h-5 text-emerald-600" />
+                            <h3 className="font-semibold text-gray-900">Progresso</h3>
+                        </div>
+                        <div className="space-y-3">
+                            <div>
+                                <p className="text-sm text-gray-600">Esta semana</p>
+                                <p className="text-3xl font-bold text-emerald-600">124</p>
+                                <p className="text-xs text-gray-500">cards revisados</p>
+                            </div>
+                            <div className="pt-3 border-t border-emerald-200">
+                                <p className="text-sm text-gray-600">Taxa de acerto</p>
+                                <p className="text-2xl font-bold text-gray-900">87%</p>
                             </div>
                         </div>
                     </motion.div>
                 </div>
-            </div>
-        </>
+
+                {/* Row 2: Stat Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    {[
+                        { label: 'Reviews a vencer', value: '12', icon: Clock, color: 'emerald', bgColor: 'emerald-50', textColor: 'emerald-600' },
+                        { label: 'Novos cards', value: '8', icon: Plus, color: 'blue', bgColor: 'blue-50', textColor: 'blue-600' },
+                        { label: 'Streak diário', value: '15 dias', icon: Flame, color: 'orange', bgColor: 'orange-50', textColor: 'orange-600' },
+                        { label: 'Taxa de acerto', value: '87%', icon: Target, color: 'purple', bgColor: 'purple-50', textColor: 'purple-600' },
+                    ].map((stat, i) => (
+                        <motion.div
+                            key={i}
+                            variants={itemVariants}
+                            whileHover={{ y: -4, scale: 1.02 }}
+                            className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 cursor-pointer transition-all"
+                        >
+                            <div className={`inline-flex items-center justify-center w-10 h-10 rounded-lg bg-${stat.bgColor} mb-3`}>
+                                <stat.icon className={`w-5 h-5 text-${stat.textColor}`} />
+                            </div>
+                            <p className="text-xs text-gray-500 mb-1">{stat.label}</p>
+                            <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                        </motion.div>
+                    ))}
+                </div>
+
+                {/* Row 3: Charts & Decks */}
+                <div className="grid grid-cols-12 gap-6">
+                    {/* Review History Line Chart */}
+                    <motion.div
+                        variants={itemVariants}
+                        className="col-span-12 lg:col-span-8 bg-white rounded-xl shadow-sm border border-gray-100 p-6"
+                    >
+                        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                            <TrendingUp className="w-5 h-5 text-emerald-600" />
+                            Histórico de Revisões
+                        </h3>
+                        <ResponsiveContainer width="100%" height={280}>
+                            <LineChart data={reviewHistoryData}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                                <XAxis
+                                    dataKey="date"
+                                    stroke="#9CA3AF"
+                                    style={{ fontSize: '12px' }}
+                                    tickLine={false}
+                                />
+                                <YAxis stroke="#9CA3AF" style={{ fontSize: '12px' }} tickLine={false} />
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: '#FFFFFF',
+                                        border: '1px solid #E5E7EB',
+                                        borderRadius: '12px',
+                                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                                    }}
+                                    labelStyle={{ color: '#111827', fontWeight: 600 }}
+                                />
+                                <Line
+                                    type="monotone"
+                                    dataKey="reviews"
+                                    stroke="#10B981"
+                                    strokeWidth={3}
+                                    dot={{ fill: '#10B981', strokeWidth: 2, r: 4 }}
+                                    activeDot={{ r: 6, fill: '#059669' }}
+                                    animationDuration={2000}
+                                />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </motion.div>
+
+                    {/* Active Decks */}
+                    <motion.div
+                        variants={itemVariants}
+                        className="col-span-12 lg:col-span-4 bg-white rounded-xl shadow-sm border border-gray-100 p-6"
+                    >
+                        <h3 className="text-lg font-bold text-gray-900 mb-6">Decks Ativos</h3>
+                        <div className="space-y-5">
+                            {[
+                                { name: 'História do Brasil', progress: 85, cards: 120, mastery: 85 },
+                                { name: 'Política Internacional', progress: 72, cards: 95, mastery: 72 },
+                                { name: 'Geografia', progress: 68, cards: 80, mastery: 68 },
+                                { name: 'Direito', progress: 90, cards: 150, mastery: 90 },
+                            ].map((deck, i) => (
+                                <motion.div
+                                    key={i}
+                                    initial={{ opacity: 0, x: -20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: 0.6 + i * 0.1 }}
+                                    whileHover={{ x: 4 }}
+                                    className="space-y-2 cursor-pointer"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-sm font-semibold text-gray-900">{deck.name}</span>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs text-gray-400">{deck.cards} cards</span>
+                                            <span className="text-xs font-bold text-emerald-600">{deck.mastery}%</span>
+                                        </div>
+                                    </div>
+                                    {/* Progress bar */}
+                                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                        <motion.div
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${deck.progress}%` }}
+                                            transition={{ duration: 1.5, delay: 0.6 + i * 0.1, ease: 'easeOut' }}
+                                            className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full"
+                                        />
+                                    </div>
+                                </motion.div>
+                            ))}
+                        </div>
+                    </motion.div>
+                </div>
+            </motion.div>
+        </div>
     )
 }

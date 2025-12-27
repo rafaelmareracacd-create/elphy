@@ -1,8 +1,10 @@
+"use client"
+
 import AnkiModule from "@/components/modules/Anki";
 
 export default function AnkiPage() {
     return (
-        <div className="fixed inset-0 overflow-auto">
+        <div className="min-h-screen">
             <AnkiModule />
         </div>
     );

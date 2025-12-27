@@ -5,8 +5,11 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-    title: "Study42",
-    description: "Advanced EdTech SaaS Dashboard",
+    title: "Elphy",
+    description: "Smart Study Assistant - Remember Everything 🐘",
+    icons: {
+        icon: "/dmgstories_Minimalist_app_icon_for_an_educational_app_called__1f34b5e9-68b8-4e44-914a-f25cbdfaa98d_2.png",
+    },
 };
 
 export default function RootLayout({
