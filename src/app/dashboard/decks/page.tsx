@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Search, Star, MoreHorizontal, Play, Edit2, Trash2, Clock, BookOpen } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
 interface Deck {
@@ -30,8 +30,6 @@ export default function DecksPage() {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [newDeck, setNewDeck] = useState({ name: "", description: "", color: "#10B981", icon: "📚" });
     const [creating, setCreating] = useState(false);
-
-    const supabase = createClient();
 
     useEffect(() => {
         fetchDecks();
@@ -223,8 +221,8 @@ export default function DecksPage() {
                                                 key={emoji}
                                                 onClick={() => setNewDeck({ ...newDeck, icon: emoji })}
                                                 className={`w-10 h-10 text-xl rounded-lg border-2 transition-all ${newDeck.icon === emoji
-                                                        ? "border-emerald-500 bg-emerald-50"
-                                                        : "border-gray-200 hover:border-gray-300"
+                                                    ? "border-emerald-500 bg-emerald-50"
+                                                    : "border-gray-200 hover:border-gray-300"
                                                     }`}
                                             >
                                                 {emoji}

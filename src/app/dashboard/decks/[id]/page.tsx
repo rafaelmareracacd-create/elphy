@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Plus, Play, Search, Edit2, Trash2, Sparkles, Save, X, BookOpen } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
@@ -40,8 +40,6 @@ export default function DeckDetailPage() {
     const [saving, setSaving] = useState(false);
     const [generating, setGenerating] = useState(false);
     const [aiTopic, setAiTopic] = useState("");
-
-    const supabase = createClient();
 
     useEffect(() => {
         fetchDeckAndCards();
