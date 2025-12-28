@@ -38,7 +38,7 @@ const routes = [
     {
         label: "Decks",
         icon: Library,
-        href: "/dashboard/planner",
+        href: "/dashboard/decks",
     },
     {
         label: "Analytics",
