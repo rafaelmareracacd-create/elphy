@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Plus, Save, CheckCircle2, AlertCircle, FileText, List, Upload, Trash2 } from 'lucide-react'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
 import { motion, AnimatePresence } from 'framer-motion'
 
 const MATERIAS = [
@@ -671,18 +671,18 @@ function PDFIngestion() {
 
             // Define the schema for structured JSON output with dica_do_elphy
             const questionSchema = {
-                type: "array" as const,
+                type: SchemaType.ARRAY as const,
                 items: {
-                    type: "object" as const,
+                    type: SchemaType.OBJECT as const,
                     properties: {
-                        num_item: { type: "number" as const, description: "Question number" },
-                        materia: { type: "string" as const, description: "Subject: História do Brasil, História Mundial, Política Internacional, Geografia, Economia, Direito, Língua Portuguesa, Língua Inglesa, Outro" },
-                        texto_item: { type: "string" as const, description: "The exact text of the question" },
-                        texto_associado: { type: "string" as const, description: "Reference text that precedes this item, if any" },
-                        comando: { type: "string" as const, description: "Command text like 'Julgue os itens...'" },
-                        gabarito: { type: "string" as const, description: "Answer: C, E, or X" },
-                        dica_do_elphy: { type: "string" as const, description: "Uma dica mnemônica curta em português (max 2 frases) para ajudar a lembrar o conceito-chave da questão. Seja criativo e pedagógico." },
-                        descricao_imagem: { type: "string" as const, description: "Se a questão tiver imagem/gráfico/mapa associado, descreva-o detalhadamente para acessibilidade. Ex: 'Mapa da Europa mostrando...' Se não houver imagem, string vazia." }
+                        num_item: { type: SchemaType.NUMBER as const, description: "Question number" },
+                        materia: { type: SchemaType.STRING as const, description: "Subject: História do Brasil, História Mundial, Política Internacional, Geografia, Economia, Direito, Língua Portuguesa, Língua Inglesa, Outro" },
+                        texto_item: { type: SchemaType.STRING as const, description: "The exact text of the question" },
+                        texto_associado: { type: SchemaType.STRING as const, description: "Reference text that precedes this item, if any" },
+                        comando: { type: SchemaType.STRING as const, description: "Command text like 'Julgue os itens...'" },
+                        gabarito: { type: SchemaType.STRING as const, description: "Answer: C, E, or X" },
+                        dica_do_elphy: { type: SchemaType.STRING as const, description: "Uma dica mnemônica curta em português (max 2 frases) para ajudar a lembrar o conceito-chave da questão. Seja criativo e pedagógico." },
+                        descricao_imagem: { type: SchemaType.STRING as const, description: "Se a questão tiver imagem/gráfico/mapa associado, descreva-o detalhadamente para acessibilidade. Ex: 'Mapa da Europa mostrando...' Se não houver imagem, string vazia." }
                     },
                     required: ["num_item", "texto_item", "dica_do_elphy"]
                 }
@@ -709,12 +709,12 @@ function PDFIngestion() {
                     generationConfig: {
                         responseMimeType: "application/json",
                         responseSchema: {
-                            type: "array" as const,
+                            type: SchemaType.ARRAY as const,
                             items: {
-                                type: "object" as const,
+                                type: SchemaType.OBJECT as const,
                                 properties: {
-                                    num: { type: "number" as const },
-                                    resp: { type: "string" as const }
+                                    num: { type: SchemaType.NUMBER as const },
+                                    resp: { type: SchemaType.STRING as const }
                                 },
                                 required: ["num", "resp"]
                             }
