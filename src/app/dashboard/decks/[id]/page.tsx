@@ -2,18 +2,26 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Plus, Play, Search, Edit2, Trash2, Sparkles, Save, X, BookOpen } from "lucide-react";
+import { ArrowLeft, Plus, Play, Search, Edit2, Trash2, Sparkles, Save, X, BookOpen, ChevronRight, Layers } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import DecksView from "@/components/modules/anki/DecksView";
+import CreateAnkiModal from "@/components/modules/anki/CreateAnkiModal";
+import DeleteConfirmModal from "@/components/modules/planner/DeleteConfirmModal";
+import CardTable from "@/components/modules/anki/CardTable";
+import Toast from "@/components/ui/Toast";
+import DeckSettingsModal from "@/components/modules/anki/DeckSettingsModal";
 
 interface Deck {
     id: string;
     name: string;
     description: string | null;
-    color: string;
-    icon: string;
+    color: string | null;
+    icon: string | null;
     cards_count: number;
+    parent_id: string | null;
+    tags: string[];
 }
 
 interface Card {
@@ -24,26 +32,48 @@ interface Card {
     interval: number;
     ease_factor: number;
     next_review: string;
+    tags: string[];
 }
+
 
 export default function DeckDetailPage() {
     const params = useParams();
+    const router = useRouter();
     const deckId = params.id as string;
 
     const [deck, setDeck] = useState<Deck | null>(null);
+    const [subDecks, setSubDecks] = useState<Deck[]>([]); // Sub-decks
+    const [allDecks, setAllDecks] = useState<{ id: string; name: string; parent_id?: string | null }[]>([]); // All decks for modal
     const [cards, setCards] = useState<Card[]>([]);
     const [loading, setLoading] = useState(true);
+    const [userId, setUserId] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [showAddCard, setShowAddCard] = useState(false);
+    const [showCreateSubDeck, setShowCreateSubDeck] = useState(false); // Sub-deck modal
     const [editingCard, setEditingCard] = useState<Card | null>(null);
-    const [newCard, setNewCard] = useState({ front: "", back: "" });
+    const [newCard, setNewCard] = useState({ front: "", back: "", tags: "" });
     const [saving, setSaving] = useState(false);
     const [generating, setGenerating] = useState(false);
     const [aiTopic, setAiTopic] = useState("");
+    const [deckTagsInput, setDeckTagsInput] = useState(""); // Deck tags editing
+
+    const [isEditingTags, setIsEditingTags] = useState(false);
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+    const [deckToDelete, setDeckToDelete] = useState<string | null>(null);
+    const [toast, setToast] = useState<{ isVisible: boolean; message: string; type?: 'success' | 'error' }>({ isVisible: false, message: "" });
 
     useEffect(() => {
+        fetchUser();
         fetchDeckAndCards();
     }, [deckId]);
+
+    const fetchUser = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            setUserId(user.id);
+        }
+    };
 
     const fetchDeckAndCards = async () => {
         setLoading(true);
@@ -55,7 +85,24 @@ export default function DeckDetailPage() {
             .eq("id", deckId)
             .single();
 
-        if (deckData) setDeck(deckData);
+        if (deckData) {
+            setDeck(deckData);
+            setDeckTagsInput(deckData.tags ? deckData.tags.join(", ") : "");
+        }
+
+        // Fetch Sub-decks
+        const { data: subDecksData } = await supabase
+            .from("decks")
+            .select("*")
+            .eq("parent_id", deckId)
+            .order("created_at", { ascending: false });
+        setSubDecks(subDecksData || []);
+
+        // Fetch All Decks for the modal selector
+        const { data: allDecksData } = await supabase
+            .from("decks")
+            .select("id, name, parent_id");
+        setAllDecks(allDecksData || []);
 
         // Fetch cards
         const { data: cardsData } = await supabase
@@ -72,25 +119,63 @@ export default function DeckDetailPage() {
         if (!newCard.front.trim() || !newCard.back.trim()) return;
         setSaving(true);
 
+        const tagsArray = newCard.tags
+            .split(",")
+            .map(t => t.trim())
+            .filter(t => t.length > 0);
+
         const { data, error } = await supabase
             .from("flashcards")
             .insert({
                 front: newCard.front,
                 back: newCard.back,
                 deck_id: deckId,
-                user_id: "00000000-0000-0000-0000-000000000000"
+                user_id: userId,
+                tags: tagsArray
             })
             .select()
             .single();
 
         if (!error && data) {
             setCards([data, ...cards]);
-            setNewCard({ front: "", back: "" });
+            setNewCard({ front: "", back: "", tags: "" });
             setShowAddCard(false);
             // Update deck count
-            if (deck) setDeck({ ...deck, cards_count: deck.cards_count + 1 });
+            if (deck) setDeck({ ...deck, cards_count: (deck.cards_count || 0) + 1 });
+            setToast({ isVisible: true, message: "Card criado com sucesso!" });
         }
         setSaving(false);
+    };
+
+    // Handler for CreateAnkiModal
+    const handleCreateCardModal = async (data: any) => {
+        const tagsArray = data.tags
+            ? (typeof data.tags === 'string' ? data.tags.split(",").map((t: string) => t.trim()).filter((t: string) => t.length > 0) : [data.tags])
+            : [];
+
+        const { data: newCardData, error } = await supabase
+            .from("flashcards")
+            .insert({
+                front: data.front,
+                back: data.back,
+                deck_id: data.deckId || deckId,
+                user_id: userId,
+                tags: tagsArray
+            })
+            .select()
+            .single();
+
+        if (!error && newCardData) {
+            // Only add to local state if it's for the current deck
+            if (data.deckId === deckId || !data.deckId) {
+                setCards([newCardData, ...cards]);
+                if (deck) setDeck({ ...deck, cards_count: (deck.cards_count || 0) + 1 });
+            }
+            setShowAddCard(false);
+            setToast({ isVisible: true, message: "Card criado com sucesso!" });
+        } else if (error) {
+            setToast({ isVisible: true, message: "Erro ao criar card", type: 'error' });
+        }
     };
 
     const updateCard = async () => {
@@ -99,7 +184,11 @@ export default function DeckDetailPage() {
 
         const { error } = await supabase
             .from("flashcards")
-            .update({ front: editingCard.front, back: editingCard.back })
+            .update({
+                front: editingCard.front,
+                back: editingCard.back,
+                tags: editingCard.tags
+            })
             .eq("id", editingCard.id);
 
         if (!error) {
@@ -119,7 +208,78 @@ export default function DeckDetailPage() {
 
         if (!error) {
             setCards(cards.filter(c => c.id !== cardId));
-            if (deck) setDeck({ ...deck, cards_count: deck.cards_count - 1 });
+            if (deck) setDeck({ ...deck, cards_count: (deck.cards_count || 0) - 1 });
+        }
+    };
+
+    const handleCreateSubDeck = async (data: any) => {
+        if (!userId) {
+            setToast({ isVisible: true, message: "Você precisa estar logado", type: 'error' });
+            return;
+        }
+        const { data: newDeck, error } = await supabase
+            .from("decks")
+            .insert({
+                user_id: userId,
+                name: data.name,
+                color: data.color,
+                icon: data.icon,
+                parent_id: deckId, // Sub-deck
+                description: "Sub-deck",
+                tags: []
+            })
+            .select()
+            .single();
+
+        if (!error && newDeck) {
+            setSubDecks([newDeck, ...subDecks]);
+            setShowCreateSubDeck(false);
+        }
+    };
+
+    const updateDeckTags = async () => {
+        if (!deck) return;
+        const tags = deckTagsInput.split(",").map(t => t.trim()).filter(Boolean);
+
+        const { error } = await supabase
+            .from("decks")
+            .update({ tags })
+            .eq("id", deck.id);
+
+        if (!error) {
+            setDeck({ ...deck, tags });
+            setIsEditingTags(false);
+        }
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!deckToDelete) return;
+
+        const { error } = await supabase
+            .from("decks")
+            .delete()
+            .eq("id", deckToDelete);
+
+        if (!error) {
+            setSubDecks(subDecks.filter(d => d.id !== deckToDelete));
+            setDeleteModalOpen(false);
+            setDeckToDelete(null);
+        }
+    };
+
+    const handleUpdateSubDeckIcon = async (deckId: string, icon: string) => {
+        try {
+            const { error } = await supabase
+                .from("decks")
+                .update({ icon })
+                .eq("id", deckId);
+
+            if (error) throw error;
+
+            setSubDecks(prev => prev.map(d => d.id === deckId ? { ...d, icon } : d));
+            setToast({ isVisible: true, message: "Ícone atualizado!" });
+        } catch (error) {
+            console.error("Error updating deck icon:", error);
         }
     };
 
@@ -162,7 +322,7 @@ As perguntas devem ser claras e objetivas. As respostas devem ser concisas mas c
                         front: card.front,
                         back: card.back,
                         deck_id: deckId,
-                        user_id: "00000000-0000-0000-0000-000000000000"
+                        user_id: userId
                     })
                     .select()
                     .single();
@@ -173,13 +333,13 @@ As perguntas devem ser claras e objetivas. As respostas devem ser concisas mas c
             }
 
             if (deck) {
-                setDeck({ ...deck, cards_count: deck.cards_count + generatedCards.length });
+                setDeck({ ...deck, cards_count: (deck.cards_count || 0) + generatedCards.length });
             }
 
             setAiTopic("");
         } catch (error) {
             console.error("Error generating cards:", error);
-            alert("Erro ao gerar cards. Tente novamente.");
+            setToast({ isVisible: true, message: "Erro ao gerar cards. Tente novamente.", type: 'error' });
         }
 
         setGenerating(false);
@@ -231,15 +391,46 @@ As perguntas devem ser claras e objetivas. As respostas devem ser concisas mas c
                     <div className="flex items-center gap-4">
                         <div
                             className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl"
-                            style={{ backgroundColor: `${deck.color}20` }}
+                            style={{ backgroundColor: `${deck.color || '#10B981'}20` }}
                         >
-                            {deck.icon}
+                            {deck.icon || '📚'}
                         </div>
                         <div>
                             <h1 className="text-3xl font-bold text-gray-900">{deck.name}</h1>
                             <p className="text-gray-500">
-                                {deck.cards_count} cards • {deck.description || "Sem descrição"}
+                                {deck.cards_count || 0} cards • {deck.description || "Sem descrição"}
                             </p>
+
+                            {/* Deck Tags */}
+                            <div className="flex items-center gap-2 mt-2">
+                                {isEditingTags ? (
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="text"
+                                            value={deckTagsInput}
+                                            onChange={(e) => setDeckTagsInput(e.target.value)}
+                                            className="px-2 py-1 text-sm border rounded-lg focus:outline-emerald-500"
+                                            placeholder="Tags separadas por vírgula"
+                                            onKeyDown={(e) => e.key === 'Enter' && updateDeckTags()}
+                                        />
+                                        <button onClick={updateDeckTags} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Save size={16} /></button>
+                                        <button onClick={() => setIsEditingTags(false)} className="p-1 text-gray-400 hover:bg-gray-50 rounded"><X size={16} /></button>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2 group cursor-pointer" onClick={() => setIsEditingTags(true)}>
+                                        <div className="flex gap-1">
+                                            {deck.tags && deck.tags.length > 0 ? (
+                                                deck.tags.map((tag, i) => (
+                                                    <span key={i} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-md">#{tag}</span>
+                                                ))
+                                            ) : (
+                                                <span className="text-gray-400 text-xs italic">Adicionar tags...</span>
+                                            )}
+                                        </div>
+                                        <Edit2 size={12} className="text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </motion.div>
@@ -249,13 +440,13 @@ As perguntas devem ser claras e objetivas. As respostas devem ser concisas mas c
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 }}
-                    className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8"
+                    className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"
                 >
                     {/* Start Study */}
                     <Link
                         href={`/dashboard/anki?deck=${deck.id}`}
                         className="flex items-center justify-center gap-2 py-4 rounded-xl font-semibold text-white shadow-md hover:shadow-lg transition-all"
-                        style={{ background: `linear-gradient(to right, ${deck.color}, ${deck.color}cc)` }}
+                        style={{ background: `linear-gradient(to right, ${deck.color || '#10B981'}, ${deck.color || '#10B981'}cc)` }}
                     >
                         <Play className="w-5 h-5" />
                         Iniciar Revisão
@@ -264,53 +455,67 @@ As perguntas devem ser claras e objetivas. As respostas devem ser concisas mas c
                     {/* Add Card */}
                     <button
                         onClick={() => setShowAddCard(true)}
-                        className="flex items-center justify-center gap-2 py-4 bg-white border-2 border-gray-200 rounded-xl font-semibold text-gray-700 hover:border-emerald-300 hover:bg-emerald-50 transition-all"
+                        className="flex items-center justify-center gap-2 py-4 bg-white border-2 border-emerald-500 rounded-xl font-semibold text-emerald-600 hover:bg-emerald-50 transition-all"
                     >
                         <Plus className="w-5 h-5" />
                         Adicionar Card
                     </button>
 
-                    {/* AI Generate */}
-                    <div className="flex gap-2">
-                        <input
-                            type="text"
-                            placeholder="Tema para gerar cards..."
-                            value={aiTopic}
-                            onChange={(e) => setAiTopic(e.target.value)}
-                            className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        />
-                        <button
-                            onClick={generateCardsWithAI}
-                            disabled={!aiTopic.trim() || generating}
-                            className="px-4 bg-purple-500 text-white rounded-xl hover:bg-purple-600 disabled:opacity-50 transition-colors"
-                        >
-                            {generating ? (
-                                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            ) : (
-                                <Sparkles className="w-5 h-5" />
-                            )}
-                        </button>
-                    </div>
+                    {/* Create Sub-deck */}
+                    <button
+                        onClick={() => setShowCreateSubDeck(true)}
+                        className="flex items-center justify-center gap-2 py-4 bg-white border-2 border-dashed border-gray-300 rounded-xl font-semibold text-gray-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
+                    >
+                        <Layers className="w-5 h-5" />
+                        Criar Sub-baralho
+                    </button>
+
+                    {/* Options */}
+                    <button
+                        onClick={() => setSettingsModalOpen(true)}
+                        className="flex items-center justify-center gap-2 py-4 bg-white border border-gray-200 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 transition-all shadow-sm"
+                    >
+                        <Sparkles className="w-5 h-5 text-gray-400" />
+                        Opções
+                    </button>
                 </motion.div>
 
-                {/* Search */}
-                <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                    className="mb-6"
-                >
-                    <div className="relative">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="Buscar cards..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+
+                {/* Sub-decks Section */}
+                {subDecks.length > 0 && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mb-8"
+                    >
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-xl font-bold text-gray-800">Sub-baralhos</h3>
+                        </div>
+                        <DecksView
+                            decks={subDecks}
+                            onSelectDeck={(id) => router.push(`/dashboard/anki?deck=${id}`)}
+                            onManageDeck={(id) => router.push(`/dashboard/decks/${id}`)}
+                            onCreateDeck={() => setShowCreateSubDeck(true)}
+                            onDeleteDeck={(id, e) => {
+                                e.stopPropagation();
+                                setDeckToDelete(id);
+                                setDeleteModalOpen(true);
+                            }}
+                            onUpdateDeckIcon={handleUpdateSubDeckIcon}
+                            hideHeader={true}
+                            showSearch={true}
+                            showCreateButton={false}
+                            compact={true}
                         />
-                    </div>
-                </motion.div>
+                    </motion.div>
+                )}
+
+                {/* Empty Sub-decks CTA if none (optional, maybe just show the button in main actions?) */}
+                {/* Actually let's add a "Create Sub-deck" button to main actions or just rely on the main Create button functionality? 
+                    The user asked for functions like adding subgroups. 
+                    I'll add a specific "Add Sub-deck" button to the Actions Bar.
+                */}
+
 
                 {/* Cards List */}
                 {filteredCards.length === 0 ? (
@@ -328,117 +533,29 @@ As perguntas devem ser claras e objetivas. As respostas devem ser concisas mas c
                         </p>
                     </motion.div>
                 ) : (
-                    <div className="space-y-3">
-                        {filteredCards.map((card, i) => (
-                            <motion.div
-                                key={card.id}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: i * 0.03 }}
-                                className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-all group"
-                            >
-                                <div className="flex items-start justify-between gap-4">
-                                    <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <p className="text-xs font-semibold text-gray-400 mb-1">FRENTE</p>
-                                            <p className="text-gray-900">{card.front}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-xs font-semibold text-gray-400 mb-1">VERSO</p>
-                                            <p className="text-gray-700">{card.back}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button
-                                            onClick={() => setEditingCard(card)}
-                                            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                                        >
-                                            <Edit2 className="w-4 h-4 text-gray-500" />
-                                        </button>
-                                        <button
-                                            onClick={() => deleteCard(card.id)}
-                                            className="p-2 rounded-lg hover:bg-red-50 transition-colors"
-                                        >
-                                            <Trash2 className="w-4 h-4 text-red-500" />
-                                        </button>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        ))}
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-gray-800">Cards neste baralho</h3>
+                            <span className="text-sm text-gray-500 font-medium">{filteredCards.length} itens</span>
+                        </div>
+                        <CardTable
+                            cards={filteredCards}
+                            onEdit={setEditingCard}
+                            onDelete={deleteCard}
+                        />
                     </div>
                 )}
 
-                {/* Add Card Modal */}
-                <AnimatePresence>
-                    {showAddCard && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-                            onClick={() => setShowAddCard(false)}
-                        >
-                            <motion.div
-                                initial={{ scale: 0.9, opacity: 0 }}
-                                animate={{ scale: 1, opacity: 1 }}
-                                exit={{ scale: 0.9, opacity: 0 }}
-                                onClick={(e) => e.stopPropagation()}
-                                className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl"
-                            >
-                                <div className="flex items-center justify-between mb-6">
-                                    <h2 className="text-2xl font-bold text-gray-900">Novo Card</h2>
-                                    <button
-                                        onClick={() => setShowAddCard(false)}
-                                        className="p-2 rounded-lg hover:bg-gray-100"
-                                    >
-                                        <X className="w-5 h-5 text-gray-500" />
-                                    </button>
-                                </div>
-
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="text-sm font-semibold text-gray-700 block mb-2">Frente (Pergunta)</label>
-                                        <textarea
-                                            placeholder="O que você quer memorizar?"
-                                            value={newCard.front}
-                                            onChange={(e) => setNewCard({ ...newCard, front: e.target.value })}
-                                            rows={3}
-                                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="text-sm font-semibold text-gray-700 block mb-2">Verso (Resposta)</label>
-                                        <textarea
-                                            placeholder="A resposta correta"
-                                            value={newCard.back}
-                                            onChange={(e) => setNewCard({ ...newCard, back: e.target.value })}
-                                            rows={3}
-                                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-3 mt-6">
-                                    <button
-                                        onClick={() => setShowAddCard(false)}
-                                        className="flex-1 py-3 border border-gray-200 rounded-xl font-semibold text-gray-700 hover:bg-gray-50"
-                                    >
-                                        Cancelar
-                                    </button>
-                                    <button
-                                        onClick={addCard}
-                                        disabled={!newCard.front.trim() || !newCard.back.trim() || saving}
-                                        className="flex-1 py-3 bg-emerald-500 text-white rounded-xl font-semibold hover:bg-emerald-600 disabled:opacity-50 flex items-center justify-center gap-2"
-                                    >
-                                        <Save className="w-4 h-4" />
-                                        {saving ? "Salvando..." : "Salvar Card"}
-                                    </button>
-                                </div>
-                            </motion.div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                {/* Add Card Modal - Using the complete CreateAnkiModal */}
+                <CreateAnkiModal
+                    isOpen={showAddCard}
+                    onClose={() => setShowAddCard(false)}
+                    onCreateCard={handleCreateCardModal}
+                    onCreateDeck={() => { }} // Not used here
+                    decks={allDecks}
+                    initialTab="card"
+                    initialSelectedDeckId={deckId}
+                />
 
                 {/* Edit Card Modal */}
                 <AnimatePresence>
@@ -487,6 +604,16 @@ As perguntas devem ser claras e objetivas. As respostas devem ser concisas mas c
                                             className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
                                         />
                                     </div>
+
+                                    <div>
+                                        <label className="text-sm font-semibold text-gray-700 block mb-2">Tags</label>
+                                        <input
+                                            type="text"
+                                            value={editingCard.tags ? editingCard.tags.join(', ') : ''}
+                                            onChange={(e) => setEditingCard({ ...editingCard, tags: e.target.value.split(',') })}
+                                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                        />
+                                    </div>
                                 </div>
 
                                 <div className="flex gap-3 mt-6">
@@ -509,6 +636,40 @@ As perguntas devem ser claras e objetivas. As respostas devem ser concisas mas c
                         </motion.div>
                     )}
                 </AnimatePresence>
+                {/* Create Sub-deck Modal */}
+                <CreateAnkiModal
+                    isOpen={showCreateSubDeck}
+                    onClose={() => setShowCreateSubDeck(false)}
+                    onCreateCard={() => { }} // Not used here
+                    onCreateDeck={handleCreateSubDeck}
+                    decks={[]} // Not needed for deck creation
+                    initialTab="deck"
+                    initialParentId={deckId}
+                />
+
+                <DeckSettingsModal
+                    isOpen={settingsModalOpen}
+                    onClose={() => setSettingsModalOpen(false)}
+                    deckId={deckId}
+                    onUpdate={() => {
+                        fetchDeckAndCards();
+                        setToast({ isVisible: true, message: "Configurações atualizadas!" });
+                    }}
+                />
+
+                <DeleteConfirmModal
+                    isOpen={deleteModalOpen}
+                    onClose={() => setDeleteModalOpen(false)}
+                    onConfirm={handleConfirmDelete}
+                    title="Excluir Sub-baralho"
+                    description="Tem certeza que deseja excluir este sub-baralho? Todos os cards e sub-baralhos dentro dele também serão excluídos permanentemente."
+                />
+
+                <Toast
+                    isVisible={toast.isVisible}
+                    message={toast.message}
+                    onClose={() => setToast({ ...toast, isVisible: false })}
+                />
             </div>
         </div>
     );

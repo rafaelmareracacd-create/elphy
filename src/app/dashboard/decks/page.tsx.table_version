@@ -1,0 +1,451 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+    Plus, Search, Star, MoreHorizontal, Play, Edit2, Trash2,
+    Clock, BookOpen, ArrowLeft, ChevronRight, ChevronDown, Folder
+} from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+// --- Interfaces ---
+
+interface Deck {
+    id: string;
+    name: string;
+    description: string | null;
+    color: string | null;
+    icon: string | null;
+    is_favorite: boolean | null;
+    created_at: string;
+}
+
+interface DeckStats {
+    new: number;
+    learn: number;
+    review: number;
+}
+
+interface DeckWithStats extends Deck {
+    stats: DeckStats;
+    subgroups: Record<string, DeckStats>; // tagName -> stats
+}
+
+const EMOJI_OPTIONS = ["📚", "🎯", "🧠", "💡", "🌍", "⚖️", "📊", "🏛️", "🔬", "💼", "🌐", "📖"];
+const COLOR_OPTIONS = [
+    "#10B981", "#3B82F6", "#8B5CF6", "#EC4899", "#F59E0B", "#EF4444",
+    "#06B6D4", "#84CC16", "#6366F1", "#F97316"
+];
+
+export default function DecksPage() {
+    const [decks, setDecks] = useState<DeckWithStats[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState("");
+
+    // Create Modal State
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [newDeck, setNewDeck] = useState({ name: "", description: "", color: "#10B981", icon: "📚" });
+    const [creating, setCreating] = useState(false);
+
+    const router = useRouter();
+
+    useEffect(() => {
+        fetchDecksAndStats();
+    }, []);
+
+    const fetchDecksAndStats = async () => {
+        setLoading(true);
+        const nowISO = new Date().toISOString();
+
+        try {
+            // 1. Fetch Decks
+            const { data: decksData, error: decksError } = await supabase
+                .from("decks")
+                .select("*")
+                .order("is_favorite", { ascending: false })
+                .order("created_at", { ascending: false });
+
+            if (decksError) throw decksError;
+
+            // 2. Fetch All Cards (Lean query)
+            // We need: deck_id, tags, interval, next_review
+            const { data: cardsData, error: cardsError } = await supabase
+                .from("flashcards")
+                .select("deck_id, tags, interval, next_review");
+
+            if (cardsError) throw cardsError;
+
+            // 3. Aggregate Stats
+            const processedDecks: DeckWithStats[] = (decksData || []).map(deck => {
+                const deckCards = cardsData?.filter(c => c.deck_id === deck.id) || [];
+
+                const stats: DeckStats = { new: 0, learn: 0, review: 0 };
+                const subgroups: Record<string, DeckStats> = {};
+
+                deckCards.forEach(card => {
+                    // Determine Status
+                    // NEW: interval == 0
+                    // REVIEW: interval > 0 && next_review <= now (Mature Due)
+                    // LEARN: interval > 0 && interval < 3 && next_review <= now (Young Due) OR just Young?
+                    // Let's simplified Logic as planned: 
+                    // New = 0 interval
+                    // Review = Due & Interval >= 3
+                    // Learn = Due & Interval < 3 & Interval > 0
+
+                    let status: 'new' | 'learn' | 'review' | 'done' = 'done';
+                    const isDue = card.next_review && card.next_review <= nowISO;
+
+                    if (card.interval === 0) {
+                        status = 'new';
+                    } else if (isDue) {
+                        if (card.interval < 3) status = 'learn';
+                        else status = 'review';
+                    } else {
+                        status = 'done'; // Not due yet
+                    }
+
+                    if (status === 'done') return;
+
+                    // Add to Deck Stats
+                    stats[status]++;
+
+                    // Add to Subgroups (Tags)
+                    if (card.tags && Array.isArray(card.tags)) {
+                        card.tags.forEach((tag: string) => {
+                            if (!tag) return;
+                            const trimmedTag = tag.trim();
+                            if (!subgroups[trimmedTag]) {
+                                subgroups[trimmedTag] = { new: 0, learn: 0, review: 0 };
+                            }
+                            subgroups[trimmedTag][status]++;
+                        });
+                    }
+                });
+
+                return { ...deck, stats, subgroups };
+            });
+
+            setDecks(processedDecks);
+
+        } catch (error) {
+            console.error("Error fetching decks data:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const createDeck = async () => {
+        if (!newDeck.name.trim()) return;
+        setCreating(true);
+
+        const { data, error } = await supabase
+            .from("decks")
+            .insert({
+                name: newDeck.name,
+                description: newDeck.description || null,
+                color: newDeck.color,
+                icon: newDeck.icon,
+                user_id: "00000000-0000-0000-0000-000000000000"
+            })
+            .select()
+            .single();
+
+        if (error) {
+            console.error("Error creating deck:", error);
+        } else if (data) {
+            // New deck has 0 stats
+            const newDeckWithStats: DeckWithStats = {
+                ...data,
+                stats: { new: 0, learn: 0, review: 0 },
+                subgroups: {}
+            };
+            setDecks([newDeckWithStats, ...decks]);
+            setShowCreateModal(false);
+            setNewDeck({ name: "", description: "", color: "#10B981", icon: "📚" });
+        }
+        setCreating(false);
+    };
+
+    const deleteDeck = async (deckId: string) => {
+        if (!confirm("Tem certeza que deseja excluir este deck e todos os seus cards?")) return;
+
+        const { error } = await supabase
+            .from("decks")
+            .delete()
+            .eq("id", deckId);
+
+        if (!error) {
+            setDecks(decks.filter(d => d.id !== deckId));
+        }
+    };
+
+    const filteredDecks = decks.filter(deck =>
+        deck.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        deck.description?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    return (
+        <div className="min-h-screen bg-[#121212] text-gray-100 p-6 md:p-10 font-sans">
+            {/* Note: User requested "Harmony" and provided "Dark" reference image. 
+                 Switched bg to dark #121212 to match typical premium/game vibes or keep existing?
+                 Existing was F8F9FA (Light). User said "Harmony". 
+                 The provided reference image (anki list) is DARK Mode.
+                 I will adopt a Dark scheme for this page to match the reference.
+             */}
+            <div className="max-w-6xl mx-auto">
+                {/* Header */}
+                <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10 border-b border-gray-800 pb-6"
+                >
+                    <div>
+                        <button
+                            onClick={() => router.back()}
+                            className="flex items-center gap-2 text-gray-500 hover:text-emerald-500 transition-colors mb-2 group"
+                        >
+                            <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                            <span className="font-medium">Voltar</span>
+                        </button>
+                        <h1 className="text-4xl font-bold text-white tracking-tight">Meus Baralhos</h1>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                            <input
+                                type="text"
+                                placeholder="Filtrar..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="pl-10 pr-4 py-2 bg-gray-900/50 border border-gray-800 rounded-lg focus:outline-none focus:border-emerald-500/50 text-sm w-48 transition-all hover:bg-gray-900"
+                            />
+                        </div>
+                        <button
+                            onClick={() => setShowCreateModal(true)}
+                            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg shadow-lg shadow-emerald-900/20 transition-all active:scale-95"
+                        >
+                            <Plus className="w-5 h-5" />
+                            <span>Novo Baralho</span>
+                        </button>
+                    </div>
+                </motion.div>
+
+                {/* Table Header */}
+                <div className="grid grid-cols-12 gap-4 px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-800">
+                    <div className="col-span-6 md:col-span-5">Baralho</div>
+                    <div className="col-span-2 text-right text-emerald-500">Revisar</div>
+                    <div className="col-span-2 text-right text-red-500">Aprender</div>
+                    <div className="col-span-2 text-right text-blue-500">Novo</div>
+                    <div className="col-span-0 md:col-span-1"></div>
+                </div>
+
+                {/* Decks List */}
+                <div className="space-y-2 mt-4">
+                    {loading ? (
+                        <div className="flex flex-col items-center justify-center h-40 gap-3 text-gray-500">
+                            <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                            <span className="text-xs tracking-widest uppercase">Carregando...</span>
+                        </div>
+                    ) : filteredDecks.length === 0 ? (
+                        <div className="text-center py-20 bg-gray-900/30 rounded-2xl border border-gray-800/50 border-dashed">
+                            <div className="text-5xl mb-4 opacity-50">🎴</div>
+                            <h3 className="text-lg font-medium text-gray-300">Nenhum baralho encontrado</h3>
+                            <button onClick={() => setShowCreateModal(true)} className="text-emerald-500 hover:underline mt-2 text-sm">
+                                Criar o primeiro baralho
+                            </button>
+                        </div>
+                    ) : (
+                        filteredDecks.map(deck => (
+                            <DeckRow
+                                key={deck.id}
+                                deck={deck}
+                                onDelete={() => deleteDeck(deck.id)}
+                            />
+                        ))
+                    )}
+                </div>
+            </div>
+
+            {/* Create Modal */}
+            <AnimatePresence>
+                {showCreateModal && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            className="bg-[#1E1E1E] border border-gray-700 rounded-2xl p-6 w-full max-w-md shadow-2xl"
+                        >
+                            {/* ... (Keep existing modal logic, check inputs) */}
+                            <h2 className="text-xl font-bold text-white mb-6">Criar Novo Baralho</h2>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 block">Nome</label>
+                                    <input
+                                        type="text"
+                                        value={newDeck.name}
+                                        onChange={e => setNewDeck({ ...newDeck, name: e.target.value })}
+                                        className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-emerald-500 focus:outline-none transition-colors"
+                                        placeholder="Ex: Biologia Molecular"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 block">Ícone</label>
+                                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                                        {EMOJI_OPTIONS.map(emoji => (
+                                            <button
+                                                key={emoji}
+                                                onClick={() => setNewDeck({ ...newDeck, icon: emoji })}
+                                                className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center text-xl border transition-all ${newDeck.icon === emoji ? 'border-emerald-500 bg-emerald-500/10' : 'border-gray-700 hover:border-gray-500'}`}
+                                            >
+                                                {emoji}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 block">Cor</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {COLOR_OPTIONS.map(color => (
+                                            <button
+                                                key={color}
+                                                onClick={() => setNewDeck({ ...newDeck, color })}
+                                                className={`w-6 h-6 rounded-full transition-transform ${newDeck.color === color ? 'scale-125 ring-2 ring-white ring-offset-2 ring-offset-[#1E1E1E]' : 'hover:scale-110'}`}
+                                                style={{ backgroundColor: color }}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3 mt-8">
+                                <button
+                                    onClick={() => setShowCreateModal(false)}
+                                    className="flex-1 py-3 text-gray-400 font-medium hover:text-white transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={createDeck}
+                                    disabled={creating || !newDeck.name}
+                                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-lg transition-all"
+                                >
+                                    {creating ? 'Criando...' : 'Criar Baralho'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+}
+
+// --- Subcomponents ---
+
+function DeckRow({ deck, onDelete }: { deck: DeckWithStats; onDelete: () => void }) {
+    const [expanded, setExpanded] = useState(false);
+    const hasSubgroups = Object.keys(deck.subgroups).length > 0;
+
+    return (
+        <div className="group">
+            <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-[#1E1E1E] border border-gray-800 rounded-xl hover:border-gray-700 transition-all items-center relative z-10">
+                {/* Deck Info */}
+                <div className="col-span-6 md:col-span-5 flex items-center gap-3">
+                    <button
+                        onClick={() => setExpanded(!expanded)}
+                        disabled={!hasSubgroups}
+                        className={`p-1 rounded hover:bg-gray-800 transition-colors ${!hasSubgroups ? 'opacity-0' : ''}`}
+                    >
+                        <ChevronRight size={16} className={`text-gray-500 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+                    </button>
+
+                    <Link href={`/dashboard/anki?deck=${deck.id}`} className="flex items-center gap-3 flex-1 group-hover:translate-x-1 transition-transform">
+                        <div
+                            className="w-10 h-10 rounded-lg flex items-center justify-center text-xl shadow-sm"
+                            style={{ backgroundColor: `${deck.color}20` }}
+                        >
+                            {deck.icon || '📚'}
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-gray-200 text-lg leading-tight group-hover:text-emerald-400 transition-colors">
+                                {deck.name}
+                            </h3>
+                            <p className="text-xs text-gray-600 font-medium mt-0.5">
+                                {hasSubgroups ? `${Object.keys(deck.subgroups).length} tópicos` : 'Geral'}
+                            </p>
+                        </div>
+                    </Link>
+                </div>
+
+                {/* Stats */}
+                <div className="col-span-2 text-right font-mono font-bold text-emerald-400 text-lg">
+                    {deck.stats.review}
+                </div>
+                <div className="col-span-2 text-right font-mono font-bold text-red-400 text-lg">
+                    {deck.stats.learn}
+                </div>
+                <div className="col-span-2 text-right font-mono font-bold text-blue-400 text-lg">
+                    {deck.stats.new}
+                </div>
+
+                {/* Actions */}
+                <div className="col-span-0 md:col-span-1 flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1">
+                        <Link
+                            href={`/dashboard/decks/${deck.id}`}
+                            className="p-2 text-gray-500 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+                            title="Editar"
+                        >
+                            <Edit2 size={16} />
+                        </Link>
+                        <button
+                            onClick={onDelete}
+                            className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors"
+                            title="Excluir"
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Subgroups */}
+            <AnimatePresence>
+                {expanded && hasSubgroups && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden bg-[#181818] border-x border-b border-gray-800/50 rounded-b-xl mx-2 -mt-2 pt-4 pb-2"
+                    >
+                        {Object.entries(deck.subgroups).map(([tag, stats]) => (
+                            <div key={tag} className="grid grid-cols-12 gap-4 px-6 py-2 items-center hover:bg-gray-800/50 transition-colors border-b border-gray-800/30 last:border-0 text-sm">
+                                <div className="col-span-6 md:col-span-5 flex items-center gap-3 pl-10">
+                                    <Folder size={14} className="text-gray-600" />
+                                    <span className="text-gray-400 font-medium">{tag}</span>
+                                </div>
+                                <div className="col-span-2 text-right font-mono text-emerald-500/80">
+                                    {stats.review > 0 ? stats.review : '-'}
+                                </div>
+                                <div className="col-span-2 text-right font-mono text-red-500/80">
+                                    {stats.learn > 0 ? stats.learn : '-'}
+                                </div>
+                                <div className="col-span-2 text-right font-mono text-blue-500/80">
+                                    {stats.new > 0 ? stats.new : '-'}
+                                </div>
+                                <div className="col-span-1"></div>
+                            </div>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+}

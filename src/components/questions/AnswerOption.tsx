@@ -26,15 +26,15 @@ export default function AnswerOption({
     // Determine visual state
     const getStateClasses = () => {
         if (isRevealed && isCorrect) {
-            return "bg-emerald-50 border-emerald-400 text-emerald-900";
+            return "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-400 dark:border-emerald-500/50 text-emerald-900 dark:text-emerald-100";
         }
         if (isRevealed && isSelected && !isCorrect) {
-            return "bg-red-50 border-red-400 text-red-900";
+            return "bg-red-50 dark:bg-red-900/20 border-red-400 dark:border-red-500/50 text-red-900 dark:text-red-100";
         }
         if (isSelected) {
-            return "bg-emerald-50 border-emerald-400 text-gray-900";
+            return "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-400 dark:border-emerald-500/50 text-gray-900 dark:text-gray-100";
         }
-        return "bg-white border-gray-200 text-gray-900 hover:border-emerald-300 hover:bg-gray-50";
+        return "bg-white dark:bg-[#1E1E1E] border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-200 hover:border-emerald-300 dark:hover:border-emerald-500/50 hover:bg-gray-50 dark:hover:bg-white/5";
     };
 
     const getIconState = () => {
@@ -68,10 +68,10 @@ export default function AnswerOption({
             {/* Letter Badge */}
             <div className={`
                 w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm
-                ${isRevealed && isCorrect ? 'bg-emerald-200 text-emerald-900' :
-                    isRevealed && isSelected && !isCorrect ? 'bg-red-200 text-red-900' :
-                        isSelected ? 'bg-emerald-200 text-emerald-900' :
-                            'bg-gray-100 text-gray-700'}
+                ${isRevealed && isCorrect ? 'bg-emerald-200 dark:bg-emerald-500/30 text-emerald-900 dark:text-emerald-300' :
+                    isRevealed && isSelected && !isCorrect ? 'bg-red-200 dark:bg-red-500/30 text-red-900 dark:text-red-300' :
+                        isSelected ? 'bg-emerald-200 dark:bg-emerald-500/30 text-emerald-900 dark:text-emerald-300' :
+                            'bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-300'}
             `}>
                 {letter}
             </div>

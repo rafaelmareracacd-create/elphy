@@ -311,10 +311,30 @@ export async function getGamificationStats(): Promise<GamificationStats | null> 
                 .select()
                 .single();
 
-            return newStats as GamificationStats;
+            return {
+                totalXP: newStats.total_xp,
+                currentLevel: newStats.current_level,
+                xpToNextLevel: newStats.xp_to_next_level,
+                dailyStreak: newStats.daily_streak,
+                maxStreak: newStats.max_streak,
+                streakFreezeCount: newStats.streak_freeze_count || 0,
+                consecutiveCorrect: newStats.consecutive_correct,
+                totalQuestionsAnswered: newStats.total_questions_answered,
+                totalCorrectAnswers: newStats.total_correct_answers,
+            } as GamificationStats;
         }
 
-        return stats as GamificationStats;
+        return {
+            totalXP: stats.total_xp,
+            currentLevel: stats.current_level,
+            xpToNextLevel: stats.xp_to_next_level,
+            dailyStreak: stats.daily_streak,
+            maxStreak: stats.max_streak,
+            streakFreezeCount: stats.streak_freeze_count || 0,
+            consecutiveCorrect: stats.consecutive_correct,
+            totalQuestionsAnswered: stats.total_questions_answered,
+            totalCorrectAnswers: stats.total_correct_answers,
+        } as GamificationStats;
     } catch (error) {
         console.error("Error getting gamification stats:", error);
         return null;

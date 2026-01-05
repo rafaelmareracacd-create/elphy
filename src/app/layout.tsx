@@ -5,10 +5,41 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-    title: "Elphy",
-    description: "Smart Study Assistant - Remember Everything 🐘",
+    title: {
+        default: "Elphy - Seu Assistente de Estudos Inteligente",
+        template: "%s | Elphy"
+    },
+    description: "Domine seus estudos com o Elphy. Inteligência artificial para prever tendências de exames, organizar materiais e otimizar seu cronograma. Nunca esqueça o que aprendeu. 🐘",
+    keywords: ["estudos", "IA", "educação", "organizacão", "concursos", "vestibular", "aprendizado", "repetição espaçada", "anki"],
+    authors: [{ name: "Elphy EdTech" }],
+    creator: "Elphy EdTech",
+    publisher: "Elphy EdTech",
+    formatDetection: {
+        email: false,
+        address: false,
+        telephone: false,
+    },
+    metadataBase: new URL('https://elphy.com.br'), // Placeholder URL
+    alternates: {
+        canonical: '/',
+    },
+    openGraph: {
+        title: "Elphy - Smart Study Assistant",
+        description: "Remember Everything with AI-powered study tools. 🐘",
+        url: 'https://elphy.com.br',
+        siteName: 'Elphy',
+        locale: 'pt_BR',
+        type: 'website',
+    },
+    twitter: {
+        card: 'summary_large_image',
+        title: "Elphy - Smart Study Assistant",
+        description: "Remember Everything with AI-powered study tools. 🐘",
+        creator: '@elphy_edu',
+    },
     icons: {
-        icon: "/dmgstories_Minimalist_app_icon_for_an_educational_app_called__1f34b5e9-68b8-4e44-914a-f25cbdfaa98d_2.png",
+        icon: "/mascot.png",
+        apple: "/mascot.png",
     },
 };
 
@@ -18,8 +49,8 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html lang="en">
-            <body className={inter.className}>{children}</body>
+        <html lang="pt-BR" suppressHydrationWarning>
+            <body className={inter.className} suppressHydrationWarning>{children}</body>
         </html>
     );
 }

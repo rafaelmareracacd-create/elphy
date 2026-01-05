@@ -1,118 +1,148 @@
+'use client'
+
 import Link from "next/link";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Brain, Target, TrendingUp } from "lucide-react";
+import { ArrowRight, Brain, Target, TrendingUp, Sparkles, CheckCircle2 } from "lucide-react";
+import { motion } from "framer-motion";
 
 export default function MarketingPage() {
     return (
-        <div className="relative flex flex-col min-h-screen">
-            {/* Video Background */}
-            <div className="fixed inset-0 w-full h-full overflow-hidden -z-10">
-                <video
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    className="absolute top-0 left-0 w-full h-full object-cover"
-                >
-                    <source src="/video.mp4" type="video/mp4" />
-                </video>
-                {/* Dark overlay for readability */}
-                <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" />
+        <div className="relative flex flex-col min-h-screen overflow-hidden bg-gray-50">
+            {/* Background Pattern (Same as Login) */}
+            <div className="absolute inset-0 z-0">
+                <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
+                <div className="absolute left-0 right-0 top-0 -z-10 m-auto h-[500px] w-[500px] rounded-full bg-emerald-400 opacity-20 blur-[100px]"></div>
+                <div className="absolute right-0 bottom-0 -z-10 h-[500px] w-[500px] rounded-full bg-teal-400 opacity-20 blur-[100px]"></div>
             </div>
 
             {/* Header */}
-            <header className="px-6 py-4 flex items-center justify-between border-b border-white/10 bg-white/5 backdrop-blur-md shadow-lg">
-                <div className="flex items-center gap-2 font-bold text-xl">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-md p-1.5">
-                        <Image
-                            src="/logo.png"
-                            alt="Elphy"
-                            width={32}
-                            height={32}
-                            className="object-contain"
-                        />
+            <header className="sticky top-0 z-50 px-6 py-4 flex items-center justify-between border-b border-gray-200/50 bg-white/80 backdrop-blur-xl shadow-sm">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                        <Sparkles className="w-5 h-5 text-white" />
                     </div>
-                    <span className="text-white">Elphy</span>
+                    <span className="font-bold text-gray-900 text-xl tracking-tight">Elphy</span>
                 </div>
-                <nav className="flex gap-4">
-                    <Link href="/login">
-                        <Button variant="ghost" className="text-white/90 hover:text-white hover:bg-white/10">Login</Button>
+                <nav className="flex gap-4 items-center">
+                    <Link href="/login" aria-label="Entrar na sua conta">
+                        <Button variant="ghost" className="text-gray-600 hover:text-emerald-600 hover:bg-emerald-50 font-medium">
+                            Entrar
+                        </Button>
                     </Link>
-                    <Link href="/dashboard">
-                        <Button className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-lg">
-                            Get Started
+                    <Link href="/login?signup=true" aria-label="Criar uma nova conta">
+                        <Button className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-lg shadow-emerald-500/20 rounded-xl">
+                            Começar Agora
                         </Button>
                     </Link>
                 </nav>
             </header>
 
             {/* Hero Section */}
-            <main className="flex-1 flex flex-col items-center justify-center text-center p-6 space-y-8 max-w-4xl mx-auto">
-                <div className="space-y-4">
-                    <div className="inline-flex items-center rounded-full border border-emerald-300/50 bg-emerald-500/20 backdrop-blur-sm px-4 py-2 text-sm font-semibold text-emerald-100">
-                        Powered by Gemini 2.5 Flash
-                    </div>
-                    <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-white drop-shadow-2xl">
-                        Master Your Studies with AI Prediction
-                    </h1>
-                    <p className="text-xl text-gray-100 max-w-2xl mx-auto leading-relaxed drop-shadow-lg">
-                        Elphy uses advanced AI to predict exam trends, organize your materials, and optimize your schedule. Like an elephant, never forget what you've learned.
-                    </p>
-                </div>
+            <main className="flex-1 relative z-10 flex flex-col items-center justify-center text-center px-6 py-20 lg:py-32 max-w-5xl mx-auto">
+                <section className="flex flex-col items-center">
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.6 }}
+                        className="space-y-8"
+                    >
+                        <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-gray-900 leading-[1.1]">
+                            Domine seus Estudos com <br />
+                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-teal-600">
+                                Previsão via IA
+                            </span>
+                        </h1>
 
-                <div className="flex flex-col sm:flex-row gap-4">
-                    <Link href="/dashboard">
-                        <Button size="lg" className="gap-2 h-14 px-8 text-lg bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-xl">
-                            Enter Dashboard <ArrowRight className="w-5 h-5" />
-                        </Button>
-                    </Link>
-                    <Link href="/#features">
-                        <Button size="lg" variant="outline" className="h-14 px-8 text-lg border-2 border-white/30 bg-white/10 text-white hover:bg-white/20 backdrop-blur-sm">
-                            Learn More
-                        </Button>
-                    </Link>
-                </div>
+                        <p className="text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
+                            O Elphy usa inteligência artificial avançada para prever tendências de exames, organizar seus materiais e otimizar seu cronograma. Como um elefante, nunca esqueça o que aprendeu.
+                        </p>
+                    </motion.div>
 
-                {/* Feature Grid Preview */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12 w-full text-left">
-                    <div className="p-6 border border-white/10 rounded-2xl bg-white/5 backdrop-blur-md shadow-xl hover:bg-white/10 transition-all">
-                        <div className="w-12 h-12 rounded-xl bg-emerald-500/20 backdrop-blur-sm flex items-center justify-center mb-4">
-                            <Target className="w-6 h-6 text-emerald-300" />
-                        </div>
-                        <h3 className="font-semibold text-white mb-2 text-lg">Smart Planner</h3>
-                        <p className="text-sm text-gray-300">Adaptive scheduling based on your performance.</p>
-                    </div>
-                    <div className="p-6 border border-white/10 rounded-2xl bg-white/5 backdrop-blur-md shadow-xl hover:bg-white/10 transition-all">
-                        <div className="w-12 h-12 rounded-xl bg-blue-500/20 backdrop-blur-sm flex items-center justify-center mb-4">
-                            <TrendingUp className="w-6 h-6 text-blue-300" />
-                        </div>
-                        <h3 className="font-semibold text-white mb-2 text-lg">Oracle Predictions</h3>
-                        <p className="text-sm text-gray-300">AI analysis of exam trends and high-yield topics.</p>
-                    </div>
-                    <div className="p-6 border border-white/10 rounded-2xl bg-white/5 backdrop-blur-md shadow-xl hover:bg-white/10 transition-all">
-                        <div className="w-12 h-12 rounded-xl bg-purple-500/20 backdrop-blur-sm flex items-center justify-center mb-4">
-                            <Brain className="w-6 h-6 text-purple-300" />
-                        </div>
-                        <h3 className="font-semibold text-white mb-2 text-lg">Spaced Repetition</h3>
-                        <p className="text-sm text-gray-300">Anki-style reviews optimized for long-term retention.</p>
-                    </div>
-                </div>
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.6, delay: 0.2 }}
+                        className="flex flex-col sm:flex-row gap-4 mt-10 justify-center items-center"
+                    >
+                        <Link href="/login?signup=true">
+                            <Button size="lg" className="h-14 px-8 text-lg bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-xl shadow-emerald-500/20 rounded-2xl gap-2 transition-transform hover:scale-105">
+                                Acessar Plataforma <ArrowRight className="w-5 h-5" />
+                            </Button>
+                        </Link>
+                        <a href="#features" aria-label="Conheça nossos recursos">
+                            <Button size="lg" variant="outline" className="h-14 px-8 text-lg border-2 border-gray-200 text-gray-600 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 rounded-2xl bg-white/50 backdrop-blur-sm">
+                                Saiba Mais
+                            </Button>
+                        </a>
+                    </motion.div>
+                </section>
 
-                {/* Elephant Memory Statement */}
-                <div className="mt-8 p-6 bg-gradient-to-br from-emerald-500/20 to-blue-500/20 border-2 border-emerald-400/30 backdrop-blur-md rounded-2xl max-w-2xl shadow-2xl">
-                    <div className="flex items-center gap-3 mb-3">
-                        <span className="text-4xl">🐘</span>
-                        <h3 className="font-bold text-white text-xl">Never Forget What Matters</h3>
-                    </div>
-                    <p className="text-gray-100 leading-relaxed">
-                        Just like elephants have incredible memory that lasts a lifetime, Elphy ensures your knowledge sticks. Our AI-powered spaced repetition adapts to your learning pattern, making sure important concepts stay fresh in your mind.
-                    </p>
-                </div>
+                {/* Feature Grid */}
+                <section id="features" className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-24 w-full text-left">
+                    <h2 className="sr-only">Nossos Recursos</h2>
+                    <motion.div
+                        whileHover={{ y: -5 }}
+                        className="p-8 rounded-3xl bg-white border border-gray-100 shadow-xl shadow-gray-200/50 hover:shadow-2xl hover:shadow-emerald-500/10 transition-all"
+                    >
+                        <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mb-6">
+                            <Target className="w-7 h-7 text-emerald-600" aria-hidden="true" />
+                        </div>
+                        <h3 className="font-bold text-gray-900 mb-3 text-xl">Planejador Inteligente</h3>
+                        <p className="text-gray-500 leading-relaxed">Cronograma adaptativo baseado no seu desempenho e tempo disponível.</p>
+                    </motion.div>
+
+                    <motion.div
+                        whileHover={{ y: -5 }}
+                        className="p-8 rounded-3xl bg-white border border-gray-100 shadow-xl shadow-gray-200/50 hover:shadow-2xl hover:shadow-blue-500/10 transition-all"
+                    >
+                        <div className="w-14 h-14 rounded-2xl bg-blue-100 flex items-center justify-center mb-6">
+                            <TrendingUp className="w-7 h-7 text-blue-600" aria-hidden="true" />
+                        </div>
+                        <h3 className="font-bold text-gray-900 mb-3 text-xl">Previsões Oráculo</h3>
+                        <p className="text-gray-500 leading-relaxed">Análise de IA sobre tendências de banca e tópicos de alto rendimento.</p>
+                    </motion.div>
+
+                    <motion.div
+                        whileHover={{ y: -5 }}
+                        className="p-8 rounded-3xl bg-white border border-gray-100 shadow-xl shadow-gray-200/50 hover:shadow-2xl hover:shadow-purple-500/10 transition-all"
+                    >
+                        <div className="w-14 h-14 rounded-2xl bg-purple-100 flex items-center justify-center mb-6">
+                            <Brain className="w-7 h-7 text-purple-600" aria-hidden="true" />
+                        </div>
+                        <h3 className="font-bold text-gray-900 mb-3 text-xl">Repetição Espaçada</h3>
+                        <p className="text-gray-500 leading-relaxed">Revisões estilo Anki otimizadas para retenção de longo prazo.</p>
+                    </motion.div>
+                </section>
+
+                {/* Elephant Memory Section */}
+                <section className="mt-16 w-full flex justify-center">
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        whileInView={{ opacity: 1 }}
+                        viewport={{ once: true }}
+                        className="p-8 bg-gradient-to-br from-emerald-500 to-teal-700 rounded-3xl max-w-3xl shadow-2xl relative overflow-hidden"
+                    >
+                        {/* Decorative circles */}
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32"></div>
+                        <div className="absolute bottom-0 left-0 w-64 h-64 bg-white opacity-5 rounded-full -ml-32 -mb-32"></div>
+
+                        <div className="relative z-10 flex flex-col md:flex-row items-center gap-6 text-left">
+                            <div className="shrink-0 w-20 h-20 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/20">
+                                <span className="text-5xl" role="img" aria-label="Elefante">🐘</span>
+                            </div>
+                            <div>
+                                <h2 className="font-bold text-white text-2xl mb-2">Nunca Esqueça o que Importa</h2>
+                                <p className="text-emerald-50 leading-relaxed">
+                                    Assim como os elefantes têm uma memória incrível que dura a vida toda, o Elphy garante que seu conhecimento permaneça. Nossa repetição espaçada por IA se adapta ao seu padrão de aprendizado.
+                                </p>
+                            </div>
+                        </div>
+                    </motion.div>
+                </section>
             </main>
 
-            <footer className="py-6 text-center text-sm text-gray-300 border-t border-white/10 bg-black/20 backdrop-blur-md">
-                © 2025 Elphy EdTech. All rights reserved.
+            <footer className="py-8 text-center text-sm text-gray-500 border-t border-gray-200 bg-white">
+                <p>© 2025 Elphy EdTech. Todos os direitos reservados.</p>
             </footer>
         </div>
     );

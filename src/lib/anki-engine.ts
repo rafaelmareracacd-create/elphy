@@ -63,7 +63,8 @@ export function calculateNextReview(
     // Update Ease Factor
     // Formula: EF' = EF + (0.1 - (5-q) * (0.08 + (5-q) * 0.02))
     newEase = newEase + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
-    if (newEase < 1.3) newEase = 1.3;
+    // Clamp to minimum 1.3 (SM-2 recommendation) and round to 2 decimals to avoid floating-point precision issues
+    newEase = Math.max(1.3, Math.round(newEase * 100) / 100);
 
     // 3. Calculate Next Date
     // If interval is 0, we might want it "Now" or "Tomorrow". Let's say 0 means < 1 day (minutes).

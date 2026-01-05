@@ -33,6 +33,8 @@ interface IngestionItem {
     num_item: number
     texto_item: string
     gabarito: string
+    dica_do_elphy?: string
+    descricao_imagem?: string
     status: 'valid' | 'error' | 'saved'
     message?: string
 }
@@ -663,89 +665,190 @@ function PDFIngestion() {
         }
 
         setIsProcessing(true);
-        setStatusMessage('Enviando arquivos para IA Visual...');
 
         try {
+            const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY!);
+
+            // Define the schema for structured JSON output with dica_do_elphy
+            const questionSchema = {
+                type: "array" as const,
+                items: {
+                    type: "object" as const,
+                    properties: {
+                        num_item: { type: "number" as const, description: "Question number" },
+                        materia: { type: "string" as const, description: "Subject: História do Brasil, História Mundial, Política Internacional, Geografia, Economia, Direito, Língua Portuguesa, Língua Inglesa, Outro" },
+                        texto_item: { type: "string" as const, description: "The exact text of the question" },
+                        texto_associado: { type: "string" as const, description: "Reference text that precedes this item, if any" },
+                        comando: { type: "string" as const, description: "Command text like 'Julgue os itens...'" },
+                        gabarito: { type: "string" as const, description: "Answer: C, E, or X" },
+                        dica_do_elphy: { type: "string" as const, description: "Uma dica mnemônica curta em português (max 2 frases) para ajudar a lembrar o conceito-chave da questão. Seja criativo e pedagógico." },
+                        descricao_imagem: { type: "string" as const, description: "Se a questão tiver imagem/gráfico/mapa associado, descreva-o detalhadamente para acessibilidade. Ex: 'Mapa da Europa mostrando...' Se não houver imagem, string vazia." }
+                    },
+                    required: ["num_item", "texto_item", "dica_do_elphy"]
+                }
+            };
+
+            const model = genAI.getGenerativeModel({
+                model: "gemini-2.5-flash",
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: questionSchema
+                }
+            });
+
+            // PHASE 1: Extract gabarito first (if provided) to inject inline
+            let gabaritoMap: Record<number, string> = {};
+            let gabaritoInlineText = "";
+
+            if (gabaritoFile) {
+                setStatusMessage('Fase 1/3: Extraindo gabarito...');
+                const gabaritoBase64 = await convertFileToBase64(gabaritoFile);
+
+                const gabaritoModel = genAI.getGenerativeModel({
+                    model: "gemini-2.5-flash",
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "array" as const,
+                            items: {
+                                type: "object" as const,
+                                properties: {
+                                    num: { type: "number" as const },
+                                    resp: { type: "string" as const }
+                                },
+                                required: ["num", "resp"]
+                            }
+                        }
+                    }
+                });
+
+                const gabaritoResult = await gabaritoModel.generateContent([
+                    {
+                        inlineData: {
+                            data: gabaritoBase64,
+                            mimeType: "application/pdf",
+                        },
+                    },
+                    `Extract all answers from this answer key (gabarito) PDF.
+                    Return a JSON array where each object has:
+                    - "num": the question number
+                    - "resp": the answer (C, E, or X for anulada)
+                    
+                    Example: [{"num": 1, "resp": "C"}, {"num": 2, "resp": "E"}]`
+                ]);
+
+                try {
+                    const gabaritoData = JSON.parse(gabaritoResult.response.text());
+                    gabaritoData.forEach((g: { num: number; resp: string }) => {
+                        gabaritoMap[g.num] = g.resp.toUpperCase();
+                    });
+
+                    // Create inline text for injection (compressed format)
+                    gabaritoInlineText = `\nGABARITO: ` +
+                        gabaritoData.map((g: { num: number; resp: string }) => `${g.num}:${g.resp}`).join(' ');
+
+                    console.log(`✓ Extracted ${gabaritoData.length} answers from gabarito`);
+                } catch (e) {
+                    console.warn("Could not parse gabarito, will extract from main PDF");
+                }
+            }
+
+            // PHASE 2: Extract questions with inline gabarito and Elphy tips (STREAMING)
+            setStatusMessage(gabaritoFile ? 'Fase 2/3: Extraindo questões em tempo real...' : 'Extraindo questões em tempo real...');
             const base64Data = await convertFileToBase64(file);
 
-            // Prepare content parts for Gemini (supports multiple files)
-            const contentParts: any[] = [
+            // Optimized prompt with noise compression instructions
+            const prompt = `Você é um parser de provas especializado. Analise o PDF e extraia TODAS as questões.
+
+RUÍDO A IGNORAR (Prompt Compression):
+- Headers: "CEBRASPE", "IRBr", "Edital:", números de página
+- "Espaço livre", rodapés, marcas d'água
+- Textos repetitivos de cabeçalho entre páginas
+
+EXTRAIR PARA CADA QUESTÃO:
+1. num_item: número da questão
+2. materia: classifique entre (História do Brasil, História Mundial, Política Internacional, Geografia, Economia, Direito, Língua Portuguesa, Língua Inglesa, Outro)
+3. texto_item: texto EXATO da questão (limpo de ruído)
+4. texto_associado: Se houver "Texto para os itens X a Y", inclua o texto completo
+5. comando: "Julgue os itens..." se aplicável
+6. gabarito: use o gabarito abaixo
+7. dica_do_elphy: crie uma dica mnemônica CURTA e CRIATIVA em português para ajudar o estudante a lembrar o conceito-chave. Seja pedagógico e use analogias quando possível.
+8. descricao_imagem: Se houver imagem, descreva-a detalhadamente. Se não houver, deixe vazio.
+${gabaritoInlineText}
+
+IMPORTANTE: A dica_do_elphy deve ser curta (max 2 frases) e memorável. Exemplo: "Lembre: Heartland = coração da Eurásia. Quem controla o centro, controla o mundo!"
+
+Retorne o JSON com todas as questões.`;
+
+            const result = await model.generateContentStream([
                 {
                     inlineData: {
                         data: base64Data,
                         mimeType: "application/pdf",
                     },
+                },
+                prompt
+            ]);
+
+            let accumulatedText = '';
+            let hasSwitchedToReview = false;
+
+            for await (const chunk of result.stream) {
+                const chunkText = chunk.text();
+                accumulatedText += chunkText;
+
+                // Visual feedback that something is happening
+                if (accumulatedText.length % 50 === 0) { // Update status occasionally to avoid render spam
+                    setStatusMessage(`Recebendo dados... (${accumulatedText.length} caracteres)`);
                 }
-            ];
 
-            let gabaritoPromptAddon = "";
-            if (gabaritoFile) {
-                const gabaritoBase64 = await convertFileToBase64(gabaritoFile);
-                contentParts.push({
-                    inlineData: {
-                        data: gabaritoBase64,
-                        mimeType: "application/pdf",
-                    },
-                });
-                gabaritoPromptAddon = "The SECOND PDF attached is the ANSWER KEY (Gabarito). Use it to find the correct answer (C or E) for each item found in the FIRST PDF.";
+                // Robust Partial JSON Parser
+                // 1. Clean markdown
+                let cleanStream = accumulatedText.replace(/```json/g, '').replace(/```/g, '').trim();
+
+                // 2. Find all complete objects { ... } using regex
+                // Improved Regex: matches { ... } non-greedy
+                // We try to parse EVERY detected block like {...} to see if it's valid JSON
+                const possibleObjects = cleanStream.match(/\{[\s\S]*?\}/g);
+
+                if (possibleObjects) {
+                    const parsedObjects = possibleObjects.map(s => {
+                        try { return JSON.parse(s); } catch (e) { return null; }
+                    }).filter(x => x && x.num_item); // Ensure it has at least a number
+
+                    if (parsedObjects.length > 0) {
+                        // Switch to review view immediately to show streaming progress
+                        if (!hasSwitchedToReview) {
+                            setStep('review');
+                            hasSwitchedToReview = true;
+                        }
+
+                        // Merge gabarito and map to interface
+                        const enrichedStreamItems = parsedObjects.map((item: any) => {
+                            const gabFromMap = gabaritoMap[item.num_item];
+                            return {
+                                id: item.num_item.toString() + "_" + defaultMeta.examen_ano, // Stable ID for React reconciliation
+                                materia: (defaultMeta.materia === 'Todas as Matérias' || !defaultMeta.materia) ? (item.materia || 'Geral') : defaultMeta.materia,
+                                examen_ano: defaultMeta.examen_ano,
+                                examen_turno: defaultMeta.examen_turno,
+                                comando: item.comando || 'Julgue o item a seguir.',
+                                texto_associado: item.texto_associado || '',
+                                num_item: item.num_item || 0,
+                                texto_item: item.texto_item || '',
+                                gabarito: item.gabarito || gabFromMap || '',
+                                dica_do_elphy: item.dica_do_elphy,
+                                descricao_imagem: item.descricao_imagem,
+                                status: 'valid'
+                            } as IngestionItem;
+                        });
+
+                        setParsedItems(enrichedStreamItems);
+                        setStatusMessage(`Extraindo... ${enrichedStreamItems.length} questões encontradas`);
+                    }
+                }
             }
 
-            if (!process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
-                console.error("API Key Check Failed. Value is:", process.env.NEXT_PUBLIC_GEMINI_API_KEY);
-            }
-            const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY!);
-            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-            const prompt = `
-            You are an expert exam parser. Analyze the attached PDF content visually.
-            
-            TASKS:
-            1. Extract ALL exam questions (items) from the FIRST PDF (The Exam).
-            2. ${gabaritoPromptAddon ? gabaritoPromptAddon : "Look for the answers in the document itself if available (marked keys or table at the end)."}
-            3. Classify the subject (matéria) of each item based on its content (e.g., História, Geografia, Direito, Economia, Política Internacional, Português, Inglês, etc.).
-            
-            Return a JSON array where each object has:
-            - "num_item": number (the question number)
-            - "materia": string (The inferred subject. Choose from: História do Brasil, História Mundial, Política Internacional, Geografia, Economia, Direito, Língua Portuguesa, Língua Inglesa, Outro)
-            - "texto_item": string (the exact text of the item statement)
-            - "texto_associado": string (Any reference text that precedes this item. If a text says "Texto para os itens 10 a 15", include that text for items 10, 11... 15. If no text is associated, return empty string.)
-            - "comando": string (Any specific command text like "Julgue os itens..." that applies. If generic, empty.)
-            - "gabarito": string (The answer: 'C', 'E', or 'X'. If not found, leave empty.)
-
-            IMPORTANT:
-            1. Be extremely precise with the "Texto Associado". It is CRITICAL that questions referring to a text have that text attached.
-            2. If you see "Texto para os itens X a Y", apply it to all those items.
-            3. IGNORE headers/footers related to page numbers or "Cebraspe".
-            4. Return ONLY the Valid JSON Array. No markdown formatting like \`\`\`json.
-            `;
-
-            contentParts.push(prompt);
-
-            const result = await model.generateContent(contentParts);
-
-            const response = result.response;
-            const text = response.text();
-
-            // Clean markdown if present
-            const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
-
-            const items = JSON.parse(cleanJson);
-
-            const enrichedItems = items.map((item: any) => ({
-                id: Math.random().toString(36).substr(2, 9),
-                materia: (defaultMeta.materia === 'Todas as Matérias' || !defaultMeta.materia) ? (item.materia || 'Geral') : defaultMeta.materia,
-                examen_ano: defaultMeta.examen_ano,
-                examen_turno: defaultMeta.examen_turno,
-                comando: item.comando || 'Julgue o item a seguir.',
-                texto_associado: item.texto_associado || '',
-                num_item: item.num_item || 0,
-                texto_item: item.texto_item || '',
-                gabarito: item.gabarito || '',
-                status: 'valid'
-            }));
-
-            setParsedItems(enrichedItems);
-            setStep('review');
+            if (!hasSwitchedToReview) setStep('review');
         } catch (error: any) {
             console.error("PDF Processing Error:", error);
             setStatusMessage(`Erro: ${error.message}`);
@@ -774,6 +877,8 @@ function PDFIngestion() {
                     gabarito: item.gabarito.toUpperCase(),
                     examen_ano: item.examen_ano,
                     examen_turno: item.examen_turno,
+                    dica_do_elphy: item.dica_do_elphy,
+                    descricao_imagem: item.descricao_imagem,
                 });
 
                 setParsedItems(prev => prev.map(p =>
@@ -982,7 +1087,7 @@ function PDFIngestion() {
                                 className="bg-emerald-600 hover:bg-emerald-700 text-white"
                                 disabled={isProcessing}
                             >
-                                {isProcessing ? 'Salvando...' : 'Salvar Tudo no Banco'}
+                                {isProcessing ? 'Processando...' : 'Salvar Tudo no Banco'}
                             </Button>
                         </div>
                     </CardHeader>
@@ -1046,6 +1151,37 @@ function PDFIngestion() {
                                             }}
                                             className="w-full p-2 border rounded-md text-sm font-medium"
                                         />
+
+                                        {/* Elphy Tip */}
+                                        <div className="bg-purple-50 p-3 rounded-md border border-purple-100">
+                                            <div className="text-xs font-bold text-purple-600 mb-1 flex items-center gap-1">
+                                                <span>🐘 Dica do Elphy:</span>
+                                            </div>
+                                            <textarea
+                                                value={item.dica_do_elphy || ''}
+                                                onChange={(e) => {
+                                                    setParsedItems(prev => prev.map(p => p.id === item.id ? { ...p, dica_do_elphy: e.target.value } : p))
+                                                }}
+                                                placeholder="Dica mnemônica..."
+                                                className="w-full text-xs text-gray-600 bg-transparent resize-y min-h-[40px] border-none focus:ring-0"
+                                            />
+                                        </div>
+
+                                        {/* Image Description (if exists) */}
+                                        {item.descricao_imagem && (
+                                            <div className="bg-orange-50 p-3 rounded-md border border-orange-100">
+                                                <div className="text-xs font-bold text-orange-600 mb-1 flex items-center gap-1">
+                                                    <span>🖼️ Descrição da Imagem (Acessibilidade):</span>
+                                                </div>
+                                                <textarea
+                                                    value={item.descricao_imagem}
+                                                    onChange={(e) => {
+                                                        setParsedItems(prev => prev.map(p => p.id === item.id ? { ...p, descricao_imagem: e.target.value } : p))
+                                                    }}
+                                                    className="w-full text-xs text-gray-600 bg-transparent resize-y min-h-[40px] border-none focus:ring-0"
+                                                />
+                                            </div>
+                                        )}
 
                                         {/* Status Feedback */}
                                         {item.status === 'saved' && <span className="text-emerald-600 text-xs font-bold flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Salvo no Banco</span>}
